@@ -9,7 +9,7 @@ import (
 
 	_ "github.com/joho/godotenv/autoload"
 
-	"StoryHub/internal/database"
+	"github.com/mAmineChniti/StoryHub/internal/database"
 )
 
 type Server struct {
@@ -19,7 +19,11 @@ type Server struct {
 }
 
 func NewServer() *http.Server {
-	port, _ := strconv.Atoi(os.Getenv("PORT"))
+	envPort := os.Getenv("PORT")
+	if envPort == "" {
+		envPort = "8080"
+	}
+	port, _ := strconv.Atoi(envPort)
 	NewServer := &Server{
 		port: port,
 
