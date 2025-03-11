@@ -59,7 +59,7 @@ func (s *service) CreateStory(req *data.StoryDetails) (bool, error) {
 	req.CreatedAt = time.Now()
 	req.UpdatedAt = time.Now()
 
-	res, err := s.db.Database("storyhub").Collection("stories").InsertOne(ctx, req)
+	res, err := s.db.Database("storyhub").Collection("storydetails").InsertOne(ctx, req)
 	if err != nil {
 		return false, fmt.Errorf("error inserting story: %v", err)
 	}
@@ -73,7 +73,7 @@ func (s *service) GetStoryDetails(id primitive.ObjectID) (*data.StoryDetails, er
 	defer cancel()
 
 	var story data.StoryDetails
-	err := s.db.Database("storyhub").Collection("stories").FindOne(ctx, primitive.M{"_id": id}).Decode(&story)
+	err := s.db.Database("storyhub").Collection("storydetails").FindOne(ctx, primitive.M{"_id": id}).Decode(&story)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching story: %v", err)
 	}
@@ -86,7 +86,7 @@ func (s *service) GetStoryContent(id primitive.ObjectID) (*data.StoryContent, er
 	defer cancel()
 
 	var content data.StoryContent
-	err := s.db.Database("storyhub").Collection("content").FindOne(ctx, primitive.M{"story_id": id}).Decode(&content)
+	err := s.db.Database("storyhub").Collection("storycontent").FindOne(ctx, primitive.M{"story_id": id}).Decode(&content)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching story content: %v", err)
 	}
@@ -101,7 +101,7 @@ func (s *service) GetStories(page, limit int) ([]data.StoryDetails, error) {
 	skip := (page - 1) * limit
 	findOptions := options.Find().SetSkip(int64(skip)).SetLimit(int64(limit))
 
-	cursor, err := s.db.Database("storyhub").Collection("stories").Find(ctx, primitive.M{}, findOptions)
+	cursor, err := s.db.Database("storyhub").Collection("storydetails").Find(ctx, primitive.M{}, findOptions)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching stories: %v", err)
 	}
@@ -147,7 +147,7 @@ func (s *service) GetStoriesByFilters(genre string, page, limit int) ([]data.Sto
 	skip := (page - 1) * limit
 	findOptions := options.Find().SetSkip(int64(skip)).SetLimit(int64(limit))
 
-	cursor, err := s.db.Database("storyhub").Collection("stories").Find(ctx, filter, findOptions)
+	cursor, err := s.db.Database("storyhub").Collection("storydetails").Find(ctx, filter, findOptions)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching stories: %v", err)
 	}
