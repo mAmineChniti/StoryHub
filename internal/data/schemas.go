@@ -8,6 +8,7 @@ import (
 type StoryDetails struct {
 	ID            primitive.ObjectID   `json:"id" bson:"_id,omitempty"`
 	Title         string               `json:"title" bson:"title" validate:"required,min=3,max=100"`
+	Genre         string               `json:"genre" bson:"genre" validate:"required,min=3,max=100"`
 	Description   string               `json:"description" bson:"description" validate:"required,min=10,max=500"`
 	OwnerID       primitive.ObjectID   `json:"owner_id" bson:"owner_id" validate:"required"`
 	Collaborators []primitive.ObjectID `json:"collaborators,omitempty" bson:"collaborators,omitempty"`
