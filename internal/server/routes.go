@@ -42,6 +42,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	e.GET("/api/v1/get-stories", s.GetStories)
 	e.GET("/api/v1/get-story-collaborators/", s.GetStoryCollaborators)
 	e.GET("/api/v1/get-stories-by-filters", s.GetStoriesByFilter)
+	e.POST("/api/v1/get-stories-by-user", s.GetStoriesByUser)
 	// e.PUT("/api/v1/update", s.Update, s.JWTMiddleware())
 	// e.PATCH("/api/v1/update", s.Update, s.JWTMiddleware())
 	// e.DELETE("/api/v1/delete", s.Delete, s.JWTMiddleware())
@@ -197,6 +198,26 @@ func (s *Server) GetStoriesByFilter(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Internal server error"})
 	}
 	return c.JSON(http.StatusOK, stories)
+}
+
+func (s *Server) GetStoriesByUser(c echo.Context) error {
+	var request struct {
+		UserID string `json:"user_id"`
+		Page   int    `json:"page"`
+		Limit  int    `json:"limit"`
+	}
+	if err := c.Bind(&request); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
+	}
+	userID, err := primitive.ObjectIDFromHex(request.UserID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid user ID"})
+	}
+	stories, err := s.db.GetStoriesByUser(userID, request.Page, request.Limit)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Internal server error"})
+	}
+	return c.JSON(http.StatusOK, map[string]any{"message": "Stories found", "stories": stories})
 }
 
 func (s *Server) JWTMiddleware() echo.MiddlewareFunc {
