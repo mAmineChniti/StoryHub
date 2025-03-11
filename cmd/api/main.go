@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"StoryHub/internal/server"
+	"github.com/mAmineChniti/StoryHub/internal/server"
 )
 
 func gracefulShutdown(apiServer *http.Server, done chan bool) {
@@ -39,6 +39,8 @@ func gracefulShutdown(apiServer *http.Server, done chan bool) {
 func main() {
 
 	server := server.NewServer()
+
+	log.Println("Server is running on port: ", server.Addr)
 
 	// Create a done channel to signal when the shutdown is complete
 	done := make(chan bool, 1)

@@ -1,10 +1,16 @@
 package server
 
 import (
+	"encoding/json"
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/gommon/log"
+	"github.com/mAmineChniti/StoryHub/internal/data"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 func (s *Server) RegisterRoutes() http.Handler {
@@ -20,21 +26,203 @@ func (s *Server) RegisterRoutes() http.Handler {
 		MaxAge:           300,
 	}))
 
-	e.GET("/", s.HelloWorldHandler)
+	e.Logger.SetLevel(log.INFO)
+	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
+		Format: "method=${method}, uri=${uri}, status=${status}\n",
+	}))
 
-	e.GET("/health", s.healthHandler)
+	DEBUG(e)
+
+	e.GET("/", func(c echo.Context) error {
+		return c.Redirect(http.StatusMovedPermanently, "/api/v1")
+	})
+	e.POST("/api/v1/create-story", s.CreateStory, s.JWTMiddleware())
+	e.GET("/api/v1/get-story-details/", s.GetStoryDetails)
+	e.GET("/api/v1/get-story-content/", s.GetStoryContent)
+	e.GET("/api/v1/get-stories", s.GetStories)
+	e.GET("/api/v1/get-story-collaborators/", s.GetStoryCollaborators)
+	e.GET("/api/v1/get-stories-by-filters", s.GetStoriesByFilter)
+	// e.PUT("/api/v1/update", s.Update, s.JWTMiddleware())
+	// e.PATCH("/api/v1/update", s.Update, s.JWTMiddleware())
+	// e.DELETE("/api/v1/delete", s.Delete, s.JWTMiddleware())
+	// e.GET("/api/v1/refresh", s.RefreshTokenHandler, s.JWTMiddleware())
+	e.GET("/api/v1/health", s.healthHandler)
+	e.RouteNotFound("/*", func(c echo.Context) error {
+		return c.JSON(http.StatusNotFound, map[string]string{"message": "Not found"})
+	})
 
 	return e
 }
 
-func (s *Server) HelloWorldHandler(c echo.Context) error {
-	resp := map[string]string{
-		"message": "Hello World",
-	}
+var (
+	jwtSecret = []byte(os.Getenv("JWTSECRET"))
+	debug     = os.Getenv("DEBUG") == "true"
+)
 
-	return c.JSON(http.StatusOK, resp)
+func DEBUG(e *echo.Echo) {
+	if debug {
+		e.Use(middleware.BodyDump(func(c echo.Context, reqBody, resBody []byte) {
+			if len(reqBody) > 0 {
+				var formattedReq any
+				if err := json.Unmarshal(reqBody, &formattedReq); err != nil {
+					log.Printf("Request Body (raw): \n%s\n", string(reqBody))
+					c.Logger().Error("Error parsing request body: " + err.Error())
+				} else {
+					reqBodyJson, err := json.MarshalIndent(formattedReq, "", "  ")
+					if err != nil {
+						log.Printf("Request Body (raw): \n%s\n", string(reqBody))
+						c.Logger().Error("Error marshaling request body: " + err.Error())
+					} else {
+						c.Logger().Debug("Request Body:\n" + string(reqBodyJson))
+					}
+				}
+			}
+
+			if len(resBody) > 0 {
+				var formattedRes any
+				if err := json.Unmarshal(resBody, &formattedRes); err != nil {
+					log.Printf("Response Body (raw): \n%s\n", string(resBody))
+					c.Logger().Error("Error parsing response body: " + err.Error())
+				} else {
+					resBodyJson, err := json.MarshalIndent(formattedRes, "", "  ")
+					if err != nil {
+						log.Printf("Response Body (raw): \n%s\n", string(resBody))
+						c.Logger().Error("Error marshaling response body: " + err.Error())
+					} else {
+						c.Logger().Debug("Response Body:\n" + string(resBodyJson))
+					}
+				}
+			}
+		}))
+	}
+}
+
+func (s *Server) CreateStory(c echo.Context) error {
+	var story data.StoryDetails
+	story.OwnerID = c.Get("user_id").(primitive.ObjectID)
+	if err := c.Bind(&story); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
+	}
+	created, err := s.db.CreateStory(&story)
+	if err != nil {
+		c.Logger().Error(err.Error())
+		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Internal server error"})
+	}
+	if !created {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Failed to create story"})
+	}
+	return c.JSON(http.StatusCreated, map[string]string{"message": "Story created successfully"})
+}
+
+func (s *Server) GetStoryDetails(c echo.Context) error {
+	var request struct {
+		ID string `json:"id"`
+	}
+	if err := c.Bind(&request); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
+	}
+	id, err := primitive.ObjectIDFromHex(request.ID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid story ID"})
+	}
+	story, err := s.db.GetStoryDetails(id)
+	if err != nil || story == nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"message": "Story not found"})
+	}
+	return c.JSON(http.StatusOK, story)
+}
+
+func (s *Server) GetStoryContent(c echo.Context) error {
+	var request struct {
+		ID string `json:"id"`
+	}
+	if err := c.Bind(&request); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
+	}
+	id, err := primitive.ObjectIDFromHex(request.ID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid story ID"})
+	}
+	content, err := s.db.GetStoryContent(id)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"message": "Story content not found"})
+	}
+	return c.JSON(http.StatusOK, map[string]any{"message": "Story content found", "content": content})
+}
+
+func (s *Server) GetStories(c echo.Context) error {
+	var request struct {
+		Page  int `json:"page"`
+		Limit int `json:"limit"`
+	}
+	if err := c.Bind(&request); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
+	}
+	stories, err := s.db.GetStories(request.Page, request.Limit)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Internal server error"})
+	}
+	return c.JSON(http.StatusOK, stories)
+}
+
+func (s *Server) GetStoryCollaborators(c echo.Context) error {
+	var request struct {
+		ID string `json:"id"`
+	}
+	if err := c.Bind(&request); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
+	}
+	id, err := primitive.ObjectIDFromHex(request.ID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid story ID"})
+	}
+	collaborators, err := s.db.GetStoryCollaborators(id)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Internal server error"})
+	}
+	return c.JSON(http.StatusOK, collaborators)
+}
+
+func (s *Server) GetStoriesByFilter(c echo.Context) error {
+	var request struct {
+		Genre string `json:"genre"`
+		Page  int    `json:"page"`
+		Limit int    `json:"limit"`
+	}
+	if err := c.Bind(&request); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
+	}
+	stories, err := s.db.GetStoriesByFilters(request.Genre, request.Page, request.Limit)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Internal server error"})
+	}
+	return c.JSON(http.StatusOK, stories)
+}
+
+func (s *Server) JWTMiddleware() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			authHeader := c.Request().Header.Get("Authorization")
+			if !strings.HasPrefix(authHeader, "Bearer ") {
+				return c.JSON(http.StatusUnauthorized, map[string]string{"message": "Invalid token format"})
+			}
+
+			userID, err := s.db.ValidateToken(authHeader)
+			if err != nil {
+				return c.JSON(http.StatusUnauthorized, map[string]string{"message": "Unauthorized: Invalid or expired token"})
+			}
+
+			c.Set("user_id", userID)
+			return next(c)
+		}
+	}
 }
 
 func (s *Server) healthHandler(c echo.Context) error {
-	return c.JSON(http.StatusOK, s.db.Health())
+	health, err := s.db.Health()
+	if err != nil {
+		c.Logger().Error(err.Error())
+		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Internal server error"})
+	}
+	return c.JSON(http.StatusOK, health)
 }
