@@ -41,7 +41,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	e.GET("/api/v1/get-story-content/", s.GetStoryContent)
 	e.POST("/api/v1/get-stories", s.GetStories)
 	e.GET("/api/v1/get-story-collaborators/", s.GetStoryCollaborators)
-	e.GET("/api/v1/get-stories-by-filters", s.GetStoriesByFilter)
+	e.POST("/api/v1/get-stories-by-filters", s.GetStoriesByFilters)
 	e.POST("/api/v1/get-stories-by-user", s.GetStoriesByUser)
 	e.GET("/api/v1/collaborations", s.GetCollaborations, s.JWTMiddleware())
 	// e.PUT("/api/v1/update", s.Update, s.JWTMiddleware())
@@ -185,7 +185,7 @@ func (s *Server) GetStoryCollaborators(c echo.Context) error {
 	return c.JSON(http.StatusOK, collaborators)
 }
 
-func (s *Server) GetStoriesByFilter(c echo.Context) error {
+func (s *Server) GetStoriesByFilters(c echo.Context) error {
 	var request struct {
 		Genres []string `json:"genres"`
 		Page   int      `json:"page"`
