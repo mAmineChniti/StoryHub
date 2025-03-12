@@ -25,6 +25,7 @@ type Service interface {
 	GetStoryCollaborators(id primitive.ObjectID) ([]data.Collaborator, error)
 	GetStoriesByFilters(genre string, page, limit int) ([]data.StoryDetails, error)
 	GetStoriesByUser(userID primitive.ObjectID, page, limit int) ([]data.StoryDetails, error)
+	GetCollaborations(userID primitive.ObjectID, page, limit int) ([]data.StoryDetails, error)
 	ValidateToken(authHeader string) (primitive.ObjectID, error)
 	Health() (map[string]string, error)
 }
@@ -178,6 +179,29 @@ func (s *service) GetStoriesByUser(userID primitive.ObjectID, page, limit int) (
 	if err := cursor.All(ctx, &stories); err != nil {
 		return nil, fmt.Errorf("error decoding stories: %v", err)
 	}
+	return stories, nil
+}
+
+func (s *service) GetCollaborations(userID primitive.ObjectID, page, limit int) ([]data.StoryDetails, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	skip := (page - 1) * limit
+	findOptions := options.Find().SetSkip(int64(skip)).SetLimit(int64(limit))
+
+	filter := primitive.M{"collaborators": primitive.M{"$in": []primitive.ObjectID{userID}}}
+
+	cursor, err := s.db.Database("storyhub").Collection("storydetails").Find(ctx, filter, findOptions)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching stories: %v", err)
+	}
+	defer cursor.Close(ctx)
+
+	var stories []data.StoryDetails
+	if err := cursor.All(ctx, &stories); err != nil {
+		return nil, fmt.Errorf("error decoding stories: %v", err)
+	}
+
 	return stories, nil
 }
 
