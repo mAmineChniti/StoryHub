@@ -43,6 +43,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	e.GET("/api/v1/get-story-collaborators/", s.GetStoryCollaborators)
 	e.GET("/api/v1/get-stories-by-filters", s.GetStoriesByFilter)
 	e.POST("/api/v1/get-stories-by-user", s.GetStoriesByUser)
+	e.GET("/api/v1/collaborations", s.GetCollaborations, s.JWTMiddleware())
 	// e.PUT("/api/v1/update", s.Update, s.JWTMiddleware())
 	// e.PATCH("/api/v1/update", s.Update, s.JWTMiddleware())
 	// e.DELETE("/api/v1/delete", s.Delete, s.JWTMiddleware())
@@ -218,6 +219,22 @@ func (s *Server) GetStoriesByUser(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Internal server error"})
 	}
 	return c.JSON(http.StatusOK, map[string]any{"message": "Stories found", "stories": stories})
+}
+
+func (s *Server) GetCollaborations(c echo.Context) error {
+	var request struct {
+		Page  int `json:"page"`
+		Limit int `json:"limit"`
+	}
+	if err := c.Bind(&request); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
+	}
+	userID := c.Get("user_id").(primitive.ObjectID)
+	collaborations, err := s.db.GetCollaborations(userID, request.Page, request.Limit)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Internal server error"})
+	}
+	return c.JSON(http.StatusOK, map[string]any{"message": "Collaborations found", "collaborations": collaborations})
 }
 
 func (s *Server) JWTMiddleware() echo.MiddlewareFunc {
