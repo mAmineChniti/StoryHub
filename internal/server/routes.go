@@ -187,14 +187,14 @@ func (s *Server) GetStoryCollaborators(c echo.Context) error {
 
 func (s *Server) GetStoriesByFilter(c echo.Context) error {
 	var request struct {
-		Genre string `json:"genre"`
-		Page  int    `json:"page"`
-		Limit int    `json:"limit"`
+		Genres []string `json:"genres"`
+		Page   int      `json:"page"`
+		Limit  int      `json:"limit"`
 	}
 	if err := c.Bind(&request); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
 	}
-	stories, err := s.db.GetStoriesByFilters(request.Genre, request.Page, request.Limit)
+	stories, err := s.db.GetStoriesByFilters(request.Genres, request.Page, request.Limit)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Internal server error"})
 	}
