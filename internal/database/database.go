@@ -22,7 +22,7 @@ type Service interface {
 	GetStoryDetails(id primitive.ObjectID) (*data.StoryDetails, error)
 	GetStoryContent(id primitive.ObjectID) (*data.StoryContent, error)
 	GetStories(page, limit int) ([]data.StoryDetails, error)
-	GetStoryCollaborators(id primitive.ObjectID) ([]data.Collaborator, error)
+	GetStoryCollaborators(id primitive.ObjectID) ([]primitive.ObjectID, error)
 	GetStoriesByFilters(genres []string, page, limit int) ([]data.StoryDetails, error)
 	GetStoriesByUser(userID primitive.ObjectID, page, limit int) ([]data.StoryDetails, error)
 	GetCollaborations(userID primitive.ObjectID, page, limit int) ([]data.StoryDetails, error)
@@ -117,24 +117,18 @@ func (s *service) GetStories(page, limit int) ([]data.StoryDetails, error) {
 	return stories, nil
 }
 
-func (s *service) GetStoryCollaborators(id primitive.ObjectID) ([]data.Collaborator, error) {
+func (s *service) GetStoryCollaborators(id primitive.ObjectID) ([]primitive.ObjectID, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-
-	cursor, err := s.db.Database("storyhub").Collection("collaborators").Find(ctx, primitive.M{"story_id": id})
+	var story data.StoryDetails
+	err := s.db.Database("storyhub").Collection("storydetails").FindOne(ctx, primitive.M{"_id": id}).Decode(&story)
 	if err != nil {
-		log.Printf("Error fetching collaborators for story %s: %v", id.Hex(), err)
-		return nil, fmt.Errorf("error fetching collaborators: %v", err)
+		return nil, fmt.Errorf("error fetching story: %v", err)
 	}
-	defer cursor.Close(ctx)
-
-	var collaborators []data.Collaborator
-	if err := cursor.All(ctx, &collaborators); err != nil {
-		log.Printf("Error decoding collaborators for story %s: %v", id.Hex(), err)
-		return nil, fmt.Errorf("error decoding collaborators: %v", err)
+	if len(story.Collaborators) == 0 {
+		return nil, fmt.Errorf("No collaborators found")
 	}
-
-	return collaborators, nil
+	return story.Collaborators, nil
 }
 
 func (s *service) GetStoriesByFilters(genres []string, page, limit int) ([]data.StoryDetails, error) {

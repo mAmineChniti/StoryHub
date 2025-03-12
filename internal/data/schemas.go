@@ -23,13 +23,6 @@ type StoryContent struct {
 	Content string             `json:"content" bson:"content" validate:"required,min=20"`
 }
 
-type Collaborator struct {
-	ID      primitive.ObjectID `json:"id" bson:"_id,omitempty"`
-	StoryID primitive.ObjectID `json:"story_id" bson:"story_id" validate:"required"`
-	UserID  primitive.ObjectID `json:"user_id" bson:"user_id" validate:"required"`
-	Role    string             `json:"role" bson:"role" validate:"required,oneof=editor viewer"`
-}
-
 type ForkRequest struct {
 	StoryID primitive.ObjectID `json:"story_id" validate:"required"`
 	UserID  primitive.ObjectID `json:"user_id" validate:"required"`

@@ -37,10 +37,10 @@ func (s *Server) RegisterRoutes() http.Handler {
 		return c.Redirect(http.StatusMovedPermanently, "/api/v1")
 	})
 	e.POST("/api/v1/create-story", s.CreateStory, s.JWTMiddleware())
-	e.GET("/api/v1/get-story-details/", s.GetStoryDetails)
-	e.GET("/api/v1/get-story-content/", s.GetStoryContent)
+	e.POST("/api/v1/get-story-details", s.GetStoryDetails)
+	e.GET("/api/v1/get-story-content", s.GetStoryContent)
 	e.POST("/api/v1/get-stories", s.GetStories)
-	e.GET("/api/v1/get-story-collaborators/", s.GetStoryCollaborators)
+	e.GET("/api/v1/get-story-collaborators", s.GetStoryCollaborators)
 	e.POST("/api/v1/get-stories-by-filters", s.GetStoriesByFilters)
 	e.POST("/api/v1/get-stories-by-user", s.GetStoriesByUser)
 	e.GET("/api/v1/collaborations", s.GetCollaborations, s.JWTMiddleware())
@@ -131,7 +131,7 @@ func (s *Server) GetStoryDetails(c echo.Context) error {
 	if err != nil || story == nil {
 		return c.JSON(http.StatusNotFound, map[string]string{"message": "Story not found"})
 	}
-	return c.JSON(http.StatusOK, story)
+	return c.JSON(http.StatusOK, map[string]any{"message": "Story found", "story": story})
 }
 
 func (s *Server) GetStoryContent(c echo.Context) error {
@@ -171,18 +171,30 @@ func (s *Server) GetStoryCollaborators(c echo.Context) error {
 	var request struct {
 		ID string `json:"id"`
 	}
+
 	if err := c.Bind(&request); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
 	}
+
 	id, err := primitive.ObjectIDFromHex(request.ID)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid story ID"})
 	}
+
 	collaborators, err := s.db.GetStoryCollaborators(id)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Internal server error"})
 	}
-	return c.JSON(http.StatusOK, collaborators)
+
+	var response struct {
+		Message       string               `json:"message"`
+		Collaborators []primitive.ObjectID `json:"collaborators"`
+	}
+
+	response.Message = "Collaborators fetched successfully"
+	response.Collaborators = collaborators
+
+	return c.JSON(http.StatusOK, response)
 }
 
 func (s *Server) GetStoriesByFilters(c echo.Context) error {
