@@ -23,7 +23,7 @@ type Service interface {
 	GetStoryContent(id primitive.ObjectID) (*data.StoryContent, error)
 	GetStories(page, limit int) ([]data.StoryDetails, error)
 	GetStoryCollaborators(id primitive.ObjectID) ([]data.Collaborator, error)
-	GetStoriesByFilters(genre string, page, limit int) ([]data.StoryDetails, error)
+	GetStoriesByFilters(genres []string, page, limit int) ([]data.StoryDetails, error)
 	GetStoriesByUser(userID primitive.ObjectID, page, limit int) ([]data.StoryDetails, error)
 	GetCollaborations(userID primitive.ObjectID, page, limit int) ([]data.StoryDetails, error)
 	ValidateToken(authHeader string) (primitive.ObjectID, error)
@@ -137,13 +137,13 @@ func (s *service) GetStoryCollaborators(id primitive.ObjectID) ([]data.Collabora
 	return collaborators, nil
 }
 
-func (s *service) GetStoriesByFilters(genre string, page, limit int) ([]data.StoryDetails, error) {
+func (s *service) GetStoriesByFilters(genres []string, page, limit int) ([]data.StoryDetails, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	filter := primitive.M{}
-	if genre != "" {
-		filter["genre"] = genre
+	if len(genres) > 0 {
+		filter["genre"] = primitive.M{"$in": genres}
 	}
 
 	skip := (page - 1) * limit
