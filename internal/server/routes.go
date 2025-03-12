@@ -198,7 +198,7 @@ func (s *Server) GetStoriesByFilter(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Internal server error"})
 	}
-	return c.JSON(http.StatusOK, stories)
+	return c.JSON(http.StatusOK, map[string]any{"message": "Stories found", "stories": stories})
 }
 
 func (s *Server) GetStoriesByUser(c echo.Context) error {
