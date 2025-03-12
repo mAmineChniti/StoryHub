@@ -39,7 +39,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	e.POST("/api/v1/create-story", s.CreateStory, s.JWTMiddleware())
 	e.GET("/api/v1/get-story-details/", s.GetStoryDetails)
 	e.GET("/api/v1/get-story-content/", s.GetStoryContent)
-	e.GET("/api/v1/get-stories", s.GetStories)
+	e.POST("/api/v1/get-stories", s.GetStories)
 	e.GET("/api/v1/get-story-collaborators/", s.GetStoryCollaborators)
 	e.GET("/api/v1/get-stories-by-filters", s.GetStoriesByFilter)
 	e.POST("/api/v1/get-stories-by-user", s.GetStoriesByUser)
