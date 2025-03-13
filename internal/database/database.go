@@ -207,32 +207,34 @@ func (s *service) EditStoryContent(storyID primitive.ObjectID, newContent string
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	filterContent := primitive.M{"story_id": storyID}
-	updateContent := primitive.M{
-		"$set": primitive.M{
-			"content": newContent,
-		},
+	var story data.StoryDetails
+	err := s.db.Database("storyhub").Collection("storydetails").FindOne(ctx, primitive.M{"_id": storyID}).Decode(&story)
+	if err != nil {
+		return false, fmt.Errorf("story not found")
 	}
+
+	filterContent := primitive.M{"story_id": storyID}
+	updateContent := primitive.M{"$set": primitive.M{"content": newContent}}
+
 	res, err := s.db.Database("storyhub").Collection("storycontent").UpdateOne(ctx, filterContent, updateContent)
 	if err != nil {
 		return false, fmt.Errorf("error updating story content: %v", err)
 	}
+
 	if res.MatchedCount == 0 {
-		return false, nil
+		newStoryContent := data.StoryContent{
+			StoryID: storyID,
+			Content: newContent,
+		}
+		_, err := s.db.Database("storyhub").Collection("storycontent").InsertOne(ctx, newStoryContent)
+		if err != nil {
+			return false, fmt.Errorf("error inserting new story content: %v", err)
+		}
 	}
 
-	filterDetails := primitive.M{"_id": storyID}
-	updateDetails := primitive.M{
-		"$set": primitive.M{
-			"updated_at": time.Now(),
-		},
-	}
-	resDetails, err := s.db.Database("storyhub").Collection("storydetails").UpdateOne(ctx, filterDetails, updateDetails)
+	_, err = s.db.Database("storyhub").Collection("storydetails").UpdateOne(ctx, primitive.M{"_id": storyID}, primitive.M{"$set": primitive.M{"updated_at": time.Now()}})
 	if err != nil {
 		return false, fmt.Errorf("error updating story details: %v", err)
-	}
-	if resDetails.MatchedCount == 0 {
-		return false, nil
 	}
 
 	return true, nil
