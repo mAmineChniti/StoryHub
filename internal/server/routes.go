@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/gommon/log"
 	"github.com/mAmineChniti/StoryHub/internal/data"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"slices"
 )
 
 func (s *Server) RegisterRoutes() http.Handler {
@@ -44,6 +45,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	e.POST("/api/v1/get-stories-by-filters", s.GetStoriesByFilters)
 	e.POST("/api/v1/get-stories-by-user", s.GetStoriesByUser)
 	e.POST("/api/v1/collaborations", s.GetCollaborations, s.JWTMiddleware())
+	e.POST("/api/v1/edit-story", s.EditStory, s.JWTMiddleware())
 	// e.PUT("/api/v1/update", s.Update, s.JWTMiddleware())
 	// e.PATCH("/api/v1/update", s.Update, s.JWTMiddleware())
 	// e.DELETE("/api/v1/delete", s.Delete, s.JWTMiddleware())
@@ -249,6 +251,49 @@ func (s *Server) GetCollaborations(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"message": "Collaborations found", "collaborations": collaborations})
 }
 
+func (s *Server) EditStory(c echo.Context) error {
+	var updatedStory struct {
+		ID      string `json:"story_id"`
+		Content string `json:"content"`
+	}
+	if err := c.Bind(&updatedStory); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
+	}
+	storyId, err := primitive.ObjectIDFromHex(updatedStory.ID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid story ID"})
+	}
+	story, err := s.db.GetStoryDetails(storyId)
+	if err != nil || story == nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"message": "Story not found"})
+	}
+	userId, ok := c.Get("user_id").(primitive.ObjectID)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"message": "Unauthorized"})
+	}
+
+	isAuthorized := false
+	if userId == story.OwnerID {
+		isAuthorized = true
+	} else {
+		if slices.Contains(story.Collaborators, userId) {
+			isAuthorized = true
+		}
+	}
+	if !isAuthorized {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"message": "Unauthorized"})
+	}
+	updated, err := s.db.EditStoryContent(storyId, updatedStory.Content)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Internal server error"})
+	}
+	if updated == false {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Failed to update story content"})
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"message": "Story content updated successfully"})
+
+}
 func (s *Server) JWTMiddleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
