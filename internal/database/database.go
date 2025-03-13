@@ -26,6 +26,7 @@ type Service interface {
 	GetStoriesByFilters(genres []string, page, limit int) ([]data.StoryDetails, error)
 	GetStoriesByUser(userID primitive.ObjectID, page, limit int) ([]data.StoryDetails, error)
 	GetCollaborations(userID primitive.ObjectID, page, limit int) ([]data.StoryDetails, error)
+	EditStoryContent(id primitive.ObjectID, content string) (bool, error)
 	ValidateToken(authHeader string) (primitive.ObjectID, error)
 	Health() (map[string]string, error)
 }
@@ -197,6 +198,41 @@ func (s *service) GetCollaborations(userID primitive.ObjectID, page, limit int) 
 	}
 
 	return stories, nil
+}
+
+func (s *service) EditStoryContent(storyID primitive.ObjectID, newContent string) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	filterContent := primitive.M{"story_id": storyID}
+	updateContent := primitive.M{
+		"$set": primitive.M{
+			"content": newContent,
+		},
+	}
+	res, err := s.db.Database("storyhub").Collection("storycontent").UpdateOne(ctx, filterContent, updateContent)
+	if err != nil {
+		return false, fmt.Errorf("error updating story content: %v", err)
+	}
+	if res.MatchedCount == 0 {
+		return false, nil
+	}
+
+	filterDetails := primitive.M{"_id": storyID}
+	updateDetails := primitive.M{
+		"$set": primitive.M{
+			"updated_at": time.Now(),
+		},
+	}
+	resDetails, err := s.db.Database("storyhub").Collection("storydetails").UpdateOne(ctx, filterDetails, updateDetails)
+	if err != nil {
+		return false, fmt.Errorf("error updating story details: %v", err)
+	}
+	if resDetails.MatchedCount == 0 {
+		return false, nil
+	}
+
+	return true, nil
 }
 
 func (s *service) ValidateToken(authHeader string) (primitive.ObjectID, error) {
