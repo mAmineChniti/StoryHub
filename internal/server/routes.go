@@ -188,15 +188,7 @@ func (s *Server) GetStoryCollaborators(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Internal server error"})
 	}
 
-	var response struct {
-		Message       string               `json:"message"`
-		Collaborators []primitive.ObjectID `json:"collaborators"`
-	}
-
-	response.Message = "Collaborators fetched successfully"
-	response.Collaborators = collaborators
-
-	return c.JSON(http.StatusOK, response)
+	return c.JSON(http.StatusOK, map[string]any{"message": "Collaborators found", "collaborators": collaborators})
 }
 
 func (s *Server) GetStoriesByFilters(c echo.Context) error {

@@ -88,10 +88,16 @@ func (s *service) GetStoryContent(id primitive.ObjectID) (*data.StoryContent, er
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var content data.StoryContent
-	err := s.db.Database("storyhub").Collection("storycontent").FindOne(ctx, primitive.M{"story_id": id}).Decode(&content)
+	var story data.StoryDetails
+	err := s.db.Database("storyhub").Collection("storydetails").FindOne(ctx, primitive.M{"_id": id}).Decode(&story)
 	if err != nil {
-		return nil, fmt.Errorf("error fetching story content: %v", err)
+		return nil, fmt.Errorf("story not found")
+	}
+
+	var content data.StoryContent
+	err = s.db.Database("storyhub").Collection("storycontent").FindOne(ctx, primitive.M{"story_id": id}).Decode(&content)
+	if err != nil {
+		return &data.StoryContent{StoryID: id}, nil
 	}
 
 	return &content, nil
@@ -125,9 +131,6 @@ func (s *service) GetStoryCollaborators(id primitive.ObjectID) ([]primitive.Obje
 	err := s.db.Database("storyhub").Collection("storydetails").FindOne(ctx, primitive.M{"_id": id}).Decode(&story)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching story: %v", err)
-	}
-	if len(story.Collaborators) == 0 {
-		return nil, fmt.Errorf("No collaborators found")
 	}
 	return story.Collaborators, nil
 }
