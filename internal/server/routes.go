@@ -117,7 +117,7 @@ func (s *Server) CreateStory(c echo.Context) error {
 
 func (s *Server) GetStoryDetails(c echo.Context) error {
 	var request struct {
-		ID string `json:"id"`
+		ID string `json:"story_id"`
 	}
 	if err := c.Bind(&request); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
@@ -135,7 +135,7 @@ func (s *Server) GetStoryDetails(c echo.Context) error {
 
 func (s *Server) GetStoryContent(c echo.Context) error {
 	var request struct {
-		ID string `json:"id"`
+		ID string `json:"story_id"`
 	}
 	if err := c.Bind(&request); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
@@ -168,7 +168,7 @@ func (s *Server) GetStories(c echo.Context) error {
 
 func (s *Server) GetStoryCollaborators(c echo.Context) error {
 	var request struct {
-		ID string `json:"id"`
+		ID string `json:"story_id"`
 	}
 
 	if err := c.Bind(&request); err != nil {
