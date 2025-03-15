@@ -27,6 +27,7 @@ type Service interface {
 	GetStoriesByUser(userID primitive.ObjectID, page, limit int) ([]data.StoryDetails, error)
 	GetCollaborations(userID primitive.ObjectID, page, limit int) ([]data.StoryDetails, error)
 	EditStoryContent(id primitive.ObjectID, content string) (bool, error)
+	DeleteStory(id primitive.ObjectID) (bool, error)
 	ValidateToken(authHeader string) (primitive.ObjectID, error)
 	Health() (map[string]string, error)
 }
@@ -235,6 +236,31 @@ func (s *service) EditStoryContent(storyID primitive.ObjectID, newContent string
 	_, err = s.db.Database("storyhub").Collection("storydetails").UpdateOne(ctx, primitive.M{"_id": storyID}, primitive.M{"$set": primitive.M{"updated_at": time.Now()}})
 	if err != nil {
 		return false, fmt.Errorf("error updating story details: %v", err)
+	}
+
+	return true, nil
+}
+
+func (s *service) DeleteStory(storyID primitive.ObjectID) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	filter := primitive.M{"_id": storyID}
+	res, err := s.db.Database("storyhub").Collection("storydetails").DeleteOne(ctx, filter)
+	if err != nil {
+		return false, fmt.Errorf("error deleting story: %v", err)
+	}
+	if res.DeletedCount == 0 {
+		return false, fmt.Errorf("story not found")
+	}
+
+	filterContent := primitive.M{"story_id": storyID}
+	contentDel, err := s.db.Database("storyhub").Collection("storycontent").DeleteOne(ctx, filterContent)
+	if err != nil {
+		return false, fmt.Errorf("error deleting story content: %v", err)
+	}
+	if contentDel.DeletedCount == 0 {
+		log.Printf("story content not found")
 	}
 
 	return true, nil

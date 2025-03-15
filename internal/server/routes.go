@@ -46,10 +46,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	e.POST("/api/v1/get-stories-by-user", s.GetStoriesByUser)
 	e.POST("/api/v1/collaborations", s.GetCollaborations, s.JWTMiddleware())
 	e.POST("/api/v1/edit-story", s.EditStory, s.JWTMiddleware())
-	// e.PUT("/api/v1/update", s.Update, s.JWTMiddleware())
-	// e.PATCH("/api/v1/update", s.Update, s.JWTMiddleware())
-	// e.DELETE("/api/v1/delete", s.Delete, s.JWTMiddleware())
-	// e.GET("/api/v1/refresh", s.RefreshTokenHandler, s.JWTMiddleware())
+	e.POST("/api/v1/delete-story", s.DeleteStory, s.JWTMiddleware())
 	e.GET("/api/v1/health", s.healthHandler)
 	e.RouteNotFound("/*", func(c echo.Context) error {
 		return c.JSON(http.StatusNotFound, map[string]string{"message": "Not found"})
@@ -285,6 +282,38 @@ func (s *Server) EditStory(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, map[string]string{"message": "Story content updated successfully"})
 
+}
+
+func (s *Server) DeleteStory(c echo.Context) error {
+	var request struct {
+		ID string `json:"story_id"`
+	}
+	if err := c.Bind(&request); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
+	}
+	storyId, err := primitive.ObjectIDFromHex(request.ID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid story ID"})
+	}
+	story, err := s.db.GetStoryDetails(storyId)
+	if err != nil || story == nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"message": "Story not found"})
+	}
+	userId, ok := c.Get("user_id").(primitive.ObjectID)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"message": "Unauthorized"})
+	}
+	if userId != story.OwnerID {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"message": "Unauthorized"})
+	}
+	deleted, err := s.db.DeleteStory(storyId)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Internal server error"})
+	}
+	if deleted == false {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Failed to delete story"})
+	}
+	return c.JSON(http.StatusOK, map[string]string{"message": "Story deleted successfully"})
 }
 func (s *Server) JWTMiddleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
