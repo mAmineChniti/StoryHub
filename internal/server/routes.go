@@ -46,7 +46,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	e.POST("/api/v1/get-stories-by-user", s.GetStoriesByUser)
 	e.POST("/api/v1/collaborations", s.GetCollaborations, s.JWTMiddleware())
 	e.POST("/api/v1/edit-story", s.EditStory, s.JWTMiddleware())
-	e.POST("/api/v1/delete-story", s.DeleteStory, s.JWTMiddleware())
+	e.DELETE("/api/v1/delete-story", s.DeleteStory, s.JWTMiddleware())
 	e.GET("/api/v1/health", s.healthHandler)
 	e.RouteNotFound("/*", func(c echo.Context) error {
 		return c.JSON(http.StatusNotFound, map[string]string{"message": "Not found"})
