@@ -38,15 +38,15 @@ func (s *Server) RegisterRoutes() http.Handler {
 		return c.Redirect(http.StatusMovedPermanently, "/api/v1")
 	})
 	e.POST("/api/v1/create-story", s.CreateStory, s.JWTMiddleware())
-	e.POST("/api/v1/get-story-details", s.GetStoryDetails)
-	e.POST("/api/v1/get-story-content", s.GetStoryContent)
+	e.GET("/api/v1/get-story-details/:story_id", s.GetStoryDetails)
+	e.GET("/api/v1/get-story-content/:story_id", s.GetStoryContent)
 	e.POST("/api/v1/get-stories", s.GetStories)
-	e.POST("/api/v1/get-story-collaborators", s.GetStoryCollaborators)
+	e.GET("/api/v1/get-story-collaborators/:story_id", s.GetStoryCollaborators)
 	e.POST("/api/v1/get-stories-by-filters", s.GetStoriesByFilters)
 	e.POST("/api/v1/get-stories-by-user", s.GetStoriesByUser)
 	e.POST("/api/v1/collaborations", s.GetCollaborations, s.JWTMiddleware())
 	e.POST("/api/v1/edit-story", s.EditStory, s.JWTMiddleware())
-	e.DELETE("/api/v1/delete-story", s.DeleteStory, s.JWTMiddleware())
+	e.DELETE("/api/v1/delete-story/:story_id", s.DeleteStory, s.JWTMiddleware())
 	e.GET("/api/v1/health", s.healthHandler)
 	e.RouteNotFound("/*", func(c echo.Context) error {
 		return c.JSON(http.StatusNotFound, map[string]string{"message": "Not found"})
@@ -56,8 +56,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 }
 
 var (
-	jwtSecret = []byte(os.Getenv("JWTSECRET"))
-	debug     = os.Getenv("DEBUG") == "true"
+	debug = os.Getenv("DEBUG") == "true"
 )
 
 func DEBUG(e *echo.Echo) {
@@ -116,17 +115,11 @@ func (s *Server) CreateStory(c echo.Context) error {
 }
 
 func (s *Server) GetStoryDetails(c echo.Context) error {
-	var request struct {
-		ID string `json:"story_id"`
-	}
-	if err := c.Bind(&request); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
-	}
-	id, err := primitive.ObjectIDFromHex(request.ID)
+	story_id, err := primitive.ObjectIDFromHex(c.Param("story_id"))
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid story ID"})
 	}
-	story, err := s.db.GetStoryDetails(id)
+	story, err := s.db.GetStoryDetails(story_id)
 	if err != nil || story == nil {
 		return c.JSON(http.StatusNotFound, map[string]string{"message": "Story not found"})
 	}
@@ -134,17 +127,11 @@ func (s *Server) GetStoryDetails(c echo.Context) error {
 }
 
 func (s *Server) GetStoryContent(c echo.Context) error {
-	var request struct {
-		ID string `json:"story_id"`
-	}
-	if err := c.Bind(&request); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
-	}
-	id, err := primitive.ObjectIDFromHex(request.ID)
+	story_id, err := primitive.ObjectIDFromHex(c.Param("story_id"))
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid story ID"})
 	}
-	content, err := s.db.GetStoryContent(id)
+	content, err := s.db.GetStoryContent(story_id)
 	if err != nil {
 		return c.JSON(http.StatusNotFound, map[string]string{"message": "Story content not found"})
 	}
@@ -167,20 +154,12 @@ func (s *Server) GetStories(c echo.Context) error {
 }
 
 func (s *Server) GetStoryCollaborators(c echo.Context) error {
-	var request struct {
-		ID string `json:"story_id"`
-	}
-
-	if err := c.Bind(&request); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
-	}
-
-	id, err := primitive.ObjectIDFromHex(request.ID)
+	story_id, err := primitive.ObjectIDFromHex(c.Param("story_id"))
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid story ID"})
 	}
 
-	collaborators, err := s.db.GetStoryCollaborators(id)
+	collaborators, err := s.db.GetStoryCollaborators(story_id)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Internal server error"})
 	}
@@ -276,7 +255,7 @@ func (s *Server) EditStory(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Internal server error"})
 	}
-	if updated == false {
+	if !updated {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Failed to update story content"})
 	}
 
@@ -285,13 +264,7 @@ func (s *Server) EditStory(c echo.Context) error {
 }
 
 func (s *Server) DeleteStory(c echo.Context) error {
-	var request struct {
-		ID string `json:"story_id"`
-	}
-	if err := c.Bind(&request); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
-	}
-	storyId, err := primitive.ObjectIDFromHex(request.ID)
+	storyId, err := primitive.ObjectIDFromHex(c.Param("story_id"))
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid story ID"})
 	}
@@ -310,11 +283,12 @@ func (s *Server) DeleteStory(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Internal server error"})
 	}
-	if deleted == false {
+	if !deleted {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Failed to delete story"})
 	}
 	return c.JSON(http.StatusOK, map[string]string{"message": "Story deleted successfully"})
 }
+
 func (s *Server) JWTMiddleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
