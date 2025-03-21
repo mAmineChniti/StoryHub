@@ -24,7 +24,4 @@ COPY --from=builder /storyhub-build/main /app/
 
 EXPOSE 8080
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD curl --fail http://localhost:8000/api/v1/health || exit 1
-
-CMD ["./main"]
+ENTRYPOINT ["/app/main"]
