@@ -2,14 +2,11 @@ package database
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"os"
-	"strings"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	_ "github.com/joho/godotenv/autoload"
 	"github.com/mAmineChniti/StoryHub/internal/data"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -28,7 +25,6 @@ type Service interface {
 	GetCollaborations(userID primitive.ObjectID, page, limit int) ([]data.StoryDetails, error)
 	EditStoryContent(id primitive.ObjectID, content string) (bool, error)
 	DeleteStory(id primitive.ObjectID) (bool, error)
-	ValidateToken(authHeader string) (primitive.ObjectID, error)
 	Health() (map[string]string, error)
 }
 
@@ -40,7 +36,6 @@ var (
 	dbUsername       = os.Getenv("DB_USERNAME")
 	dbPassword       = os.Getenv("DB_PASSWORD")
 	connectionString = os.Getenv("DB_CONNECTION_STRING")
-	jwtSecret        = []byte(os.Getenv("JWTSECRET"))
 )
 
 func New() Service {
@@ -264,37 +259,6 @@ func (s *service) DeleteStory(storyID primitive.ObjectID) (bool, error) {
 	}
 
 	return true, nil
-}
-
-func (s *service) ValidateToken(authHeader string) (primitive.ObjectID, error) {
-	if !strings.HasPrefix(authHeader, "Bearer ") {
-		return primitive.ObjectID{}, fmt.Errorf("invalid token format")
-	}
-
-	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-
-	claims := &jwt.RegisteredClaims{}
-	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (any, error) {
-		return jwtSecret, nil
-	})
-
-	if err != nil {
-		if errors.Is(err, jwt.ErrTokenExpired) {
-			return primitive.ObjectID{}, fmt.Errorf("token expired: %v", err)
-		}
-		return primitive.ObjectID{}, fmt.Errorf("invalid token: %v", err)
-	}
-
-	if !token.Valid {
-		return primitive.ObjectID{}, fmt.Errorf("invalid token")
-	}
-
-	userID, err := primitive.ObjectIDFromHex(claims.Subject)
-	if err != nil {
-		return primitive.ObjectID{}, fmt.Errorf("invalid user ID: %v", err)
-	}
-
-	return userID, nil
 }
 
 func (s *service) Health() (map[string]string, error) {

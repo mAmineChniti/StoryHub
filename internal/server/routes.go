@@ -2,16 +2,19 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
-	"strings"
 
+	"slices"
+
+	"github.com/golang-jwt/jwt"
+	echojwt "github.com/labstack/echo-jwt"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
 	"github.com/mAmineChniti/StoryHub/internal/data"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"slices"
 )
 
 func (s *Server) RegisterRoutes() http.Handler {
@@ -56,7 +59,8 @@ func (s *Server) RegisterRoutes() http.Handler {
 }
 
 var (
-	debug = os.Getenv("DEBUG") == "true"
+	jwtSecret = []byte(os.Getenv("JWT_SECRET"))
+	debug     = os.Getenv("DEBUG") == "true"
 )
 
 func DEBUG(e *echo.Echo) {
@@ -290,22 +294,38 @@ func (s *Server) DeleteStory(c echo.Context) error {
 }
 
 func (s *Server) JWTMiddleware() echo.MiddlewareFunc {
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			authHeader := c.Request().Header.Get("Authorization")
-			if !strings.HasPrefix(authHeader, "Bearer ") {
-				return c.JSON(http.StatusUnauthorized, map[string]string{"message": "Invalid token format"})
+	return echojwt.WithConfig(echojwt.Config{
+		SigningKey:    jwtSecret,
+		SigningMethod: "HS256",
+		TokenLookup:   "header:Authorization",
+		ErrorHandler: func(c echo.Context, err error) error {
+			if errors.Is(err, echojwt.ErrJWTMissing) {
+				return c.JSON(http.StatusUnauthorized, map[string]string{"message": "Authorization header missing"})
+			}
+			return c.JSON(http.StatusUnauthorized, map[string]string{"message": "Invalid or expired token"})
+		},
+		SuccessHandler: func(c echo.Context) {
+			token := c.Get("user").(*jwt.Token)
+			claims := token.Claims.(jwt.MapClaims)
+
+			if claims["jti"] != "access" {
+				if err := c.JSON(http.StatusUnauthorized, map[string]string{"message": "Invalid token type"}); err != nil {
+					c.Logger().Error("Failed to send response:", err)
+				}
+				return
 			}
 
-			userID, err := s.db.ValidateToken(authHeader)
+			userID, err := primitive.ObjectIDFromHex(claims["sub"].(string))
 			if err != nil {
-				return c.JSON(http.StatusUnauthorized, map[string]string{"message": "Unauthorized: Invalid or expired token"})
+				if err := c.JSON(http.StatusUnauthorized, map[string]string{"message": "Invalid user in token"}); err != nil {
+					c.Logger().Error("Failed to send response:", err)
+				}
+				return
 			}
 
 			c.Set("user_id", userID)
-			return next(c)
-		}
-	}
+		},
+	})
 }
 
 func (s *Server) healthHandler(c echo.Context) error {
