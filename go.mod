@@ -3,6 +3,7 @@ module github.com/mAmineChniti/StoryHub
 go 1.24.0
 
 require (
+	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/joho/godotenv v1.5.1
 	github.com/labstack/echo/v4 v4.13.3
 	go.mongodb.org/mongo-driver v1.17.3
@@ -18,7 +19,6 @@ require (
 
 require (
 	github.com/go-playground/validator/v10 v10.25.0
-	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/klauspost/compress v1.17.4 // indirect
 	github.com/labstack/echo-jwt v0.0.0-20221127215225-c84d41a71003
