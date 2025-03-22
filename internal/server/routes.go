@@ -3,13 +3,14 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 
 	"slices"
 
 	"github.com/golang-jwt/jwt/v5"
-	echojwt "github.com/labstack/echo-jwt"
+	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
@@ -59,8 +60,8 @@ func (s *Server) RegisterRoutes() http.Handler {
 }
 
 var (
-	jwtSecret = []byte(os.Getenv("JWT_SECRET"))
 	debug     = os.Getenv("DEBUG") == "true"
+	jwtSecret = []byte(os.Getenv("JWT_SECRET"))
 )
 
 func DEBUG(e *echo.Echo) {
@@ -294,72 +295,38 @@ func (s *Server) DeleteStory(c echo.Context) error {
 }
 
 func (s *Server) JWTMiddleware() echo.MiddlewareFunc {
-	return echojwt.WithConfig(echojwt.Config{
-		SigningKey:    jwtSecret,
-		SigningMethod: "HS256",
-		TokenLookup:   "header:Authorization",
-		ErrorHandler:  jwtErrorHandler,
-		SuccessHandler: func(c echo.Context) {
-			handleValidToken(c, "access")
+	config := echojwt.Config{
+		SigningKey: jwtSecret,
+		ParseTokenFunc: func(c echo.Context, auth string) (any, error) {
+			claims := &jwt.RegisteredClaims{}
+			token, err := jwt.ParseWithClaims(auth, claims, func(t *jwt.Token) (any, error) {
+				return jwtSecret, nil
+			})
+			if err != nil {
+				return nil, err
+			}
+			if !token.Valid {
+				return nil, errors.New("invalid token")
+			}
+			if claims.ID != "access" {
+				return nil, errors.New("invalid token type")
+			}
+			userID, err := primitive.ObjectIDFromHex(claims.Subject)
+			if err != nil {
+				return nil, fmt.Errorf("invalid user ID: %v", err)
+			}
+			c.Set("user_id", userID)
+			return token, nil
 		},
-	})
+		TokenLookup: "header:Authorization",
+		ErrorHandler: func(c echo.Context, err error) error {
+			return c.JSON(http.StatusUnauthorized, map[string]string{
+				"message": fmt.Sprintf("Unauthorized: %v", err.Error()),
+			})
+		},
+	}
+	return echojwt.WithConfig(config)
 }
-
-func jwtErrorHandler(c echo.Context, err error) error {
-	if errors.Is(err, echojwt.ErrJWTMissing) {
-		c.Logger().Error("Authorization header missing")
-		return c.JSON(http.StatusUnauthorized, map[string]string{"message": "Authorization header missing"})
-	}
-
-	c.Logger().Error("JWT invalid error:", err)
-	return c.JSON(http.StatusUnauthorized, map[string]string{"message": "Invalid or expired token"})
-}
-
-func handleValidToken(c echo.Context, expectedTokenType string) {
-	token, ok := c.Get("user").(*jwt.Token)
-	if !ok {
-		c.Logger().Error("Invalid token format")
-		err := c.JSON(http.StatusUnauthorized, map[string]string{"message": "Invalid token format"})
-		if err != nil {
-			c.Logger().Error("Error sending response:", err)
-		}
-		return
-	}
-
-	claims, ok := token.Claims.(*jwt.RegisteredClaims)
-	if !ok {
-		c.Logger().Error("Invalid token claims structure")
-		err := c.JSON(http.StatusUnauthorized, map[string]string{"message": "Invalid token claims"})
-		if err != nil {
-			c.Logger().Error("Error sending response:", err)
-		}
-		return
-	}
-
-	c.Logger().Debugf("Token validation - Subject: %s, ID: %s, ExpiresAt: %v", claims.Subject, claims.ID, claims.ExpiresAt)
-
-	if claims.ID != expectedTokenType {
-		c.Logger().Warnf("Invalid token type: expected %s got %s", expectedTokenType, claims.ID)
-		err := c.JSON(http.StatusUnauthorized, map[string]string{"message": "Invalid token type"})
-		if err != nil {
-			c.Logger().Error("Error sending response:", err)
-		}
-		return
-	}
-
-	userID, err := primitive.ObjectIDFromHex(claims.Subject)
-	if err != nil {
-		c.Logger().Errorf("Invalid user ID format: %s", claims.Subject)
-		err := c.JSON(http.StatusUnauthorized, map[string]string{"message": "Invalid user identifier"})
-		if err != nil {
-			c.Logger().Error("Error sending response:", err)
-		}
-		return
-	}
-
-	c.Set("user_id", userID)
-}
-
 func (s *Server) healthHandler(c echo.Context) error {
 	health, err := s.db.Health()
 	if err != nil {
