@@ -106,18 +106,21 @@ func DEBUG(e *echo.Echo) {
 func (s *Server) CreateStory(c echo.Context) error {
 	var story data.StoryDetails
 	story.OwnerID = c.Get("user_id").(primitive.ObjectID)
+
 	if err := c.Bind(&story); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
 	}
-	created, err := s.db.CreateStory(&story)
+
+	insertedID, err := s.db.CreateStory(&story)
 	if err != nil {
 		c.Logger().Error(err.Error())
 		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Internal server error"})
 	}
-	if !created {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Failed to create story"})
-	}
-	return c.JSON(http.StatusCreated, map[string]string{"message": "Story created successfully"})
+
+	return c.JSON(http.StatusCreated, map[string]any{
+		"message":  "Story created successfully",
+		"story_id": insertedID,
+	})
 }
 
 func (s *Server) GetStoryDetails(c echo.Context) error {

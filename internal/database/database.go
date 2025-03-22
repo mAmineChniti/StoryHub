@@ -15,7 +15,7 @@ import (
 )
 
 type Service interface {
-	CreateStory(req *data.StoryDetails) (bool, error)
+	CreateStory(req *data.StoryDetails) (primitive.ObjectID, error)
 	GetStoryDetails(id primitive.ObjectID) (*data.StoryDetails, error)
 	GetStoryContent(id primitive.ObjectID) (*data.StoryContent, error)
 	GetStories(page, limit int) ([]data.StoryDetails, error)
@@ -51,7 +51,7 @@ func New() Service {
 	}
 }
 
-func (s *service) CreateStory(req *data.StoryDetails) (bool, error) {
+func (s *service) CreateStory(req *data.StoryDetails) (primitive.ObjectID, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -60,11 +60,10 @@ func (s *service) CreateStory(req *data.StoryDetails) (bool, error) {
 
 	res, err := s.db.Database("storyhub").Collection("storydetails").InsertOne(ctx, req)
 	if err != nil {
-		return false, fmt.Errorf("error inserting story: %v", err)
+		return primitive.NilObjectID, fmt.Errorf("error inserting story: %v", err)
 	}
 
-	req.ID = res.InsertedID.(primitive.ObjectID)
-	return true, nil
+	return res.InsertedID.(primitive.ObjectID), nil
 }
 
 func (s *service) GetStoryDetails(id primitive.ObjectID) (*data.StoryDetails, error) {
