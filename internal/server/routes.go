@@ -298,47 +298,66 @@ func (s *Server) JWTMiddleware() echo.MiddlewareFunc {
 		SigningKey:    jwtSecret,
 		SigningMethod: "HS256",
 		TokenLookup:   "header:Authorization",
-		ErrorHandler: func(c echo.Context, err error) error {
-			if errors.Is(err, echojwt.ErrJWTMissing) {
-				return c.JSON(http.StatusUnauthorized, map[string]string{"message": "Authorization header missing"})
-			}
-			return c.JSON(http.StatusUnauthorized, map[string]string{"message": "Invalid or expired token"})
-		},
+		ErrorHandler:  jwtErrorHandler,
 		SuccessHandler: func(c echo.Context) {
-			token, ok := c.Get("user").(*jwt.Token)
-			if !ok {
-				if err := c.JSON(http.StatusUnauthorized, map[string]string{"message": "Token not found"}); err != nil {
-					c.Logger().Error("failed to send response: ", err)
-				}
-				return
-			}
-
-			claims, ok := token.Claims.(*jwt.RegisteredClaims)
-			if !ok {
-				if err := c.JSON(http.StatusUnauthorized, map[string]string{"message": "Invalid token claims"}); err != nil {
-					c.Logger().Error("failed to send response: ", err)
-				}
-				return
-			}
-
-			if claims.ID != "access" {
-				if err := c.JSON(http.StatusUnauthorized, map[string]string{"message": "Invalid token type"}); err != nil {
-					c.Logger().Error("failed to send response: ", err)
-				}
-				return
-			}
-
-			userID, err := primitive.ObjectIDFromHex(claims.Subject)
-			if err != nil {
-				if err := c.JSON(http.StatusUnauthorized, map[string]string{"message": "Invalid user in token"}); err != nil {
-					c.Logger().Error("failed to send response: ", err)
-				}
-				return
-			}
-
-			c.Set("user_id", userID)
+			handleValidToken(c, "access")
 		},
 	})
+}
+
+func jwtErrorHandler(c echo.Context, err error) error {
+	if errors.Is(err, echojwt.ErrJWTMissing) {
+		c.Logger().Error("Authorization header missing")
+		return c.JSON(http.StatusUnauthorized, map[string]string{"message": "Authorization header missing"})
+	}
+
+	c.Logger().Error("JWT invalid error:", err)
+	return c.JSON(http.StatusUnauthorized, map[string]string{"message": "Invalid or expired token"})
+}
+
+func handleValidToken(c echo.Context, expectedTokenType string) {
+	token, ok := c.Get("user").(*jwt.Token)
+	if !ok {
+		c.Logger().Error("Invalid token format")
+		err := c.JSON(http.StatusUnauthorized, map[string]string{"message": "Invalid token format"})
+		if err != nil {
+			c.Logger().Error("Error sending response:", err)
+		}
+		return
+	}
+
+	claims, ok := token.Claims.(*jwt.RegisteredClaims)
+	if !ok {
+		c.Logger().Error("Invalid token claims structure")
+		err := c.JSON(http.StatusUnauthorized, map[string]string{"message": "Invalid token claims"})
+		if err != nil {
+			c.Logger().Error("Error sending response:", err)
+		}
+		return
+	}
+
+	c.Logger().Debugf("Token validation - Subject: %s, ID: %s, ExpiresAt: %v", claims.Subject, claims.ID, claims.ExpiresAt)
+
+	if claims.ID != expectedTokenType {
+		c.Logger().Warnf("Invalid token type: expected %s got %s", expectedTokenType, claims.ID)
+		err := c.JSON(http.StatusUnauthorized, map[string]string{"message": "Invalid token type"})
+		if err != nil {
+			c.Logger().Error("Error sending response:", err)
+		}
+		return
+	}
+
+	userID, err := primitive.ObjectIDFromHex(claims.Subject)
+	if err != nil {
+		c.Logger().Errorf("Invalid user ID format: %s", claims.Subject)
+		err := c.JSON(http.StatusUnauthorized, map[string]string{"message": "Invalid user identifier"})
+		if err != nil {
+			c.Logger().Error("Error sending response:", err)
+		}
+		return
+	}
+
+	c.Set("user_id", userID)
 }
 
 func (s *Server) healthHandler(c echo.Context) error {
