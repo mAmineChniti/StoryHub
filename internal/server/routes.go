@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"slices"
 
@@ -298,21 +299,30 @@ func (s *Server) JWTMiddleware() echo.MiddlewareFunc {
 	config := echojwt.Config{
 		SigningKey: jwtSecret,
 		ParseTokenFunc: func(c echo.Context, auth string) (any, error) {
+			tokenString := auth
+			if strings.HasPrefix(auth, "Bearer ") {
+				tokenString = strings.TrimPrefix(auth, "Bearer ")
+			}
+
 			claims := &jwt.RegisteredClaims{}
-			token, err := jwt.ParseWithClaims(auth, claims, func(t *jwt.Token) (any, error) {
+			token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (any, error) {
 				return jwtSecret, nil
 			})
 			if err != nil {
+				c.Logger().Errorf("Token parsing error: %v", err)
 				return nil, err
 			}
 			if !token.Valid {
+				c.Logger().Error("Token is invalid")
 				return nil, errors.New("invalid token")
 			}
 			if claims.ID != "access" {
+				c.Logger().Errorf("Invalid token type: %s", claims.ID)
 				return nil, errors.New("invalid token type")
 			}
 			userID, err := primitive.ObjectIDFromHex(claims.Subject)
 			if err != nil {
+				c.Logger().Errorf("Invalid user ID in token: %v", err)
 				return nil, fmt.Errorf("invalid user ID: %v", err)
 			}
 			c.Set("user_id", userID)
@@ -320,6 +330,7 @@ func (s *Server) JWTMiddleware() echo.MiddlewareFunc {
 		},
 		TokenLookup: "header:Authorization",
 		ErrorHandler: func(c echo.Context, err error) error {
+			c.Logger().Errorf("JWT Error: %v", err)
 			return c.JSON(http.StatusUnauthorized, map[string]string{
 				"message": fmt.Sprintf("Unauthorized: %v", err.Error()),
 			})
@@ -327,6 +338,7 @@ func (s *Server) JWTMiddleware() echo.MiddlewareFunc {
 	}
 	return echojwt.WithConfig(config)
 }
+
 func (s *Server) healthHandler(c echo.Context) error {
 	health, err := s.db.Health()
 	if err != nil {
