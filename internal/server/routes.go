@@ -50,7 +50,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	e.POST("/api/v1/get-stories-by-filters", s.GetStoriesByFilters)
 	e.POST("/api/v1/get-stories-by-user", s.GetStoriesByUser)
 	e.POST("/api/v1/collaborations", s.GetCollaborations, s.JWTMiddleware())
-	e.POST("/api/v1/edit-story", s.EditStory, s.JWTMiddleware())
+	e.PATCH("/api/v1/edit-story", s.EditStory, s.JWTMiddleware())
 	e.DELETE("/api/v1/delete-story/:story_id", s.DeleteStory, s.JWTMiddleware())
 	e.GET("/api/v1/health", s.healthHandler)
 	e.RouteNotFound("/*", func(c echo.Context) error {
@@ -266,7 +266,6 @@ func (s *Server) EditStory(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"message": "Story content updated successfully"})
-
 }
 
 func (s *Server) DeleteStory(c echo.Context) error {
