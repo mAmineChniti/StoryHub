@@ -62,7 +62,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 var (
 	debug     = os.Getenv("DEBUG") == "true"
-	jwtSecret = []byte(os.Getenv("JWT_SECRET"))
+	jwtSecret = []byte(os.Getenv("JWTSECRET"))
 )
 
 func DEBUG(e *echo.Echo) {
