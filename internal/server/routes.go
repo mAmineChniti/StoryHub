@@ -52,6 +52,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	e.POST("/api/v1/collaborations", s.GetCollaborations, s.JWTMiddleware())
 	e.PATCH("/api/v1/edit-story", s.EditStory, s.JWTMiddleware())
 	e.DELETE("/api/v1/delete-story/:story_id", s.DeleteStory, s.JWTMiddleware())
+	e.DELETE("/api/v1/delete-all-stories", s.DeleteAllStories, s.JWTMiddleware())
 	e.GET("/api/v1/health", s.healthHandler)
 	e.RouteNotFound("/*", func(c echo.Context) error {
 		return c.JSON(http.StatusNotFound, map[string]string{"message": "Not found"})
@@ -295,6 +296,21 @@ func (s *Server) DeleteStory(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Failed to delete story"})
 	}
 	return c.JSON(http.StatusOK, map[string]string{"message": "Story deleted successfully"})
+}
+
+func (s *Server) DeleteAllStories(c echo.Context) error {
+	userId, ok := c.Get("user_id").(primitive.ObjectID)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"message": "Unauthorized"})
+	}
+	deleted, err := s.db.DeleteAllStoriesByUser(userId)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Internal server error"})
+	}
+	if !deleted {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Failed to delete stories"})
+	}
+	return c.JSON(http.StatusOK, map[string]string{"message": "Stories deleted successfully"})
 }
 
 func (s *Server) JWTMiddleware() echo.MiddlewareFunc {

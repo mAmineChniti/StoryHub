@@ -25,6 +25,7 @@ type Service interface {
 	GetCollaborations(userID primitive.ObjectID, page, limit int) ([]data.StoryDetails, error)
 	EditStoryContent(id primitive.ObjectID, content string) (bool, error)
 	DeleteStory(id primitive.ObjectID) (bool, error)
+	DeleteAllStoriesByUser(userID primitive.ObjectID) (bool, error)
 	Health() (map[string]string, error)
 }
 
@@ -255,6 +256,43 @@ func (s *service) DeleteStory(storyID primitive.ObjectID) (bool, error) {
 	}
 	if contentDel.DeletedCount == 0 {
 		log.Printf("story content not found")
+	}
+
+	return true, nil
+}
+
+func (s *service) DeleteAllStoriesByUser(userID primitive.ObjectID) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	filter := primitive.M{"owner_id": userID}
+	cursor, err := s.db.Database("storyhub").Collection("storydetails").Find(ctx, filter)
+	if err != nil {
+		return false, fmt.Errorf("error finding user stories: %v", err)
+	}
+	defer cursor.Close(ctx)
+
+	var storyIDs []primitive.ObjectID
+	for cursor.Next(ctx) {
+		var story data.StoryDetails
+		if err := cursor.Decode(&story); err != nil {
+			return false, fmt.Errorf("error decoding story: %v", err)
+		}
+		storyIDs = append(storyIDs, story.ID)
+	}
+
+	if len(storyIDs) == 0 {
+		return true, nil
+	}
+
+	_, err = s.db.Database("storyhub").Collection("storydetails").DeleteMany(ctx, primitive.M{"owner_id": userID})
+	if err != nil {
+		return false, fmt.Errorf("error deleting story details: %v", err)
+	}
+
+	_, err = s.db.Database("storyhub").Collection("storycontent").DeleteMany(ctx, primitive.M{"story_id": primitive.M{"$in": storyIDs}})
+	if err != nil {
+		return false, fmt.Errorf("error deleting story contents: %v", err)
 	}
 
 	return true, nil
