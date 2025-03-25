@@ -15,7 +15,7 @@ type StoryDetails struct {
 	Collaborators []primitive.ObjectID `json:"collaborators,omitempty" bson:"collaborators,omitempty"`
 	CreatedAt     time.Time            `json:"created_at" bson:"created_at"`
 	UpdatedAt     time.Time            `json:"updated_at" bson:"updated_at"`
-	ForkedFrom    *primitive.ObjectID  `json:"forked_from,omitempty" bson:"forked_from,omitempty"`
+	ForkedFrom    primitive.ObjectID   `json:"forked_from,omitempty" bson:"forked_from,omitempty"`
 }
 
 type StoryContent struct {
