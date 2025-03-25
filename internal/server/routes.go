@@ -1,11 +1,9 @@
 package server
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -26,22 +24,6 @@ func (s *Server) RegisterRoutes() http.Handler {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
-	// Debug middleware to log request bodies
-	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			if debug {
-				body, err := io.ReadAll(c.Request().Body)
-				if err != nil {
-					log.Printf("Error reading request body: %v", err)
-				} else {
-					log.Printf("Request Body: %s", string(body))
-					c.Request().Body = io.NopCloser(bytes.NewBuffer(body))
-				}
-			}
-			return next(c)
-		}
-	})
-
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins:     []string{"https://*", "http://*"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
@@ -50,7 +32,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 		MaxAge:           300,
 	}))
 
-	e.Logger.SetLevel(log.Lvl(log.INFO))
+	e.Logger.SetLevel(log.INFO)
 	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
 		Format: "method=${method}, uri=${uri}, status=${status}\n",
 	}))
@@ -248,43 +230,13 @@ func (s *Server) GetCollaborations(c echo.Context) error {
 }
 
 func (s *Server) EditStory(c echo.Context) error {
-	// Read raw body first
-	bodyBytes, err := io.ReadAll(c.Request().Body)
-	if err != nil {
-		log.Infof("Error reading request body: %v", err)
-		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Could not read request body"})
-	}
-
-	// Log raw body for debugging
-	log.Infof("Raw request body: %s", string(bodyBytes))
-
-	// Restore body for further processing
-	c.Request().Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-
 	var updatedStory struct {
 		ID      string `json:"story_id"`
 		Content string `json:"content"`
 	}
-
-	// Try to unmarshal manually first
-	var rawMap map[string]interface{}
-	if err := json.Unmarshal(bodyBytes, &rawMap); err != nil {
-		log.Infof("JSON unmarshal error for raw map: %v", err)
-	} else {
-		log.Infof("Parsed raw map: %+v", rawMap)
-	}
-
-	// Attempt binding
 	if err := c.Bind(&updatedStory); err != nil {
-		log.Infof("Bind error: %v", err)
-		log.Infof("Bind error details: story_id=%s, content length=%d", updatedStory.ID, len(updatedStory.Content))
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"message":  "Invalid request body",
-			"error":    err.Error(),
-			"raw_body": string(bodyBytes),
-		})
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
 	}
-
 	storyId, err := primitive.ObjectIDFromHex(updatedStory.ID)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid story ID"})
