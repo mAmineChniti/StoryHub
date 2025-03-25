@@ -24,6 +24,7 @@ type Service interface {
 	GetStoriesByUser(userID primitive.ObjectID, page, limit int) ([]data.StoryDetails, error)
 	GetCollaborations(userID primitive.ObjectID, page, limit int) ([]data.StoryDetails, error)
 	EditStoryContent(id primitive.ObjectID, content string) (bool, error)
+	ForkStory(id primitive.ObjectID, userID primitive.ObjectID) (primitive.ObjectID, error)
 	DeleteStory(id primitive.ObjectID) (bool, error)
 	DeleteAllStoriesByUser(userID primitive.ObjectID) (bool, error)
 	Health() (map[string]string, error)
@@ -93,9 +94,14 @@ func (s *service) GetStoryContent(id primitive.ObjectID) (*data.StoryContent, er
 	var content data.StoryContent
 	err = s.db.Database("storyhub").Collection("storycontent").FindOne(ctx, primitive.M{"story_id": id}).Decode(&content)
 	if err != nil {
-		return &data.StoryContent{StoryID: id}, nil
+		if err == mongo.ErrNoDocuments {
+			return &data.StoryContent{
+				StoryID: id,
+				Content: "",
+			}, nil
+		}
+		return nil, fmt.Errorf("error finding story content: %v", err)
 	}
-
 	return &content, nil
 }
 
@@ -234,6 +240,52 @@ func (s *service) EditStoryContent(storyID primitive.ObjectID, newContent string
 	}
 
 	return true, nil
+}
+
+func (s *service) ForkStory(storyID, userID primitive.ObjectID) (primitive.ObjectID, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	story, err := s.GetStoryDetails(storyID)
+	if err != nil {
+		return primitive.NilObjectID, fmt.Errorf("story not found: %v", err)
+	}
+
+	forkedStory := &data.StoryDetails{
+		ID:            primitive.ObjectID{},
+		OwnerID:       userID,
+		Title:         story.Title,
+		Description:   story.Description,
+		Genre:         story.Genre,
+		Collaborators: []primitive.ObjectID{},
+		ForkedFrom:    story.ID,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+
+	inserted_story_id, err := s.CreateStory(forkedStory)
+	if err != nil {
+		return primitive.NilObjectID, fmt.Errorf("error creating forked story: %v", err)
+	}
+
+	storyContent, err := s.GetStoryContent(storyID)
+	if err != nil {
+		return primitive.NilObjectID, fmt.Errorf("error getting story content: %v", err)
+	}
+
+	if storyContent.Content != "" {
+		forkedStoryContent := &data.StoryContent{
+			ID:      primitive.ObjectID{},
+			StoryID: inserted_story_id,
+			Content: storyContent.Content,
+		}
+
+		_, err = s.db.Database("storyhub").Collection("storycontent").InsertOne(ctx, forkedStoryContent)
+		if err != nil {
+			return inserted_story_id, fmt.Errorf("error inserting story content: %v", err)
+		}
+	}
+	return inserted_story_id, nil
 }
 
 func (s *service) DeleteStory(storyID primitive.ObjectID) (bool, error) {

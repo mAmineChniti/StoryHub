@@ -51,6 +51,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	e.POST("/api/v1/get-stories-by-user", s.GetStoriesByUser)
 	e.POST("/api/v1/collaborations", s.GetCollaborations, s.JWTMiddleware())
 	e.PATCH("/api/v1/edit-story", s.EditStory, s.JWTMiddleware())
+	e.GET("/api/v1/fork-story/:story_id", s.ForkStory, s.JWTMiddleware())
 	e.DELETE("/api/v1/delete-story/:story_id", s.DeleteStory, s.JWTMiddleware())
 	e.DELETE("/api/v1/delete-all-stories", s.DeleteAllStories, s.JWTMiddleware())
 	e.GET("/api/v1/health", s.healthHandler)
@@ -270,6 +271,32 @@ func (s *Server) EditStory(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"message": "Story content updated successfully"})
+}
+
+func (s *Server) ForkStory(c echo.Context) error {
+	storyId, err := primitive.ObjectIDFromHex(c.Param("story_id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid story ID"})
+	}
+	story, err := s.db.GetStoryDetails(storyId)
+	if err != nil || story == nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"message": "Story not found"})
+	}
+	userId, ok := c.Get("user_id").(primitive.ObjectID)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"message": "Unauthorized"})
+	}
+	if userId == story.OwnerID {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Cannot fork your own story"})
+	}
+	forkedStoryID, err := s.db.ForkStory(storyId, userId)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Internal server error"})
+	}
+	if forkedStoryID == primitive.NilObjectID {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Failed to fork story"})
+	}
+	return c.JSON(http.StatusCreated, map[string]any{"message": "Story forked successfully", "story_id": forkedStoryID})
 }
 
 func (s *Server) DeleteStory(c echo.Context) error {
