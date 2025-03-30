@@ -9,6 +9,7 @@ import (
 
 	_ "github.com/joho/godotenv/autoload"
 	"github.com/mAmineChniti/StoryHub/internal/data"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -249,6 +250,19 @@ func (s *service) ForkStory(storyID, userID primitive.ObjectID) (primitive.Objec
 	story, err := s.GetStoryDetails(storyID)
 	if err != nil {
 		return primitive.NilObjectID, fmt.Errorf("story not found: %v", err)
+	}
+
+	filter := bson.M{
+		"forked_from": storyID,
+		"owner_id":    userID,
+	}
+	var existingFork data.StoryDetails
+	err = s.db.Database("storyhub").Collection("storydetails").FindOne(ctx, filter).Decode(&existingFork)
+	if err == nil {
+		return primitive.NilObjectID, fmt.Errorf("you have already forked this story")
+	}
+	if err != mongo.ErrNoDocuments {
+		return primitive.NilObjectID, fmt.Errorf("error checking existing forks: %v", err)
 	}
 
 	forkedStory := &data.StoryDetails{
