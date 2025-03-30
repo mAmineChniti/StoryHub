@@ -291,6 +291,9 @@ func (s *Server) ForkStory(c echo.Context) error {
 	}
 	forkedStoryID, err := s.db.ForkStory(storyId, userId)
 	if err != nil {
+		if strings.Contains(err.Error(), "you have already forked this story") {
+			return c.JSON(http.StatusConflict, map[string]string{"message": "You have already forked this story"})
+		}
 		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "Internal server error"})
 	}
 	if forkedStoryID == primitive.NilObjectID {
