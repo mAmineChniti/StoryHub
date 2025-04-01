@@ -1,9 +1,13 @@
 package database
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"time"
 
@@ -29,6 +33,7 @@ type Service interface {
 	DeleteStory(id primitive.ObjectID) (bool, error)
 	DeleteAllStoriesByUser(userID primitive.ObjectID) (bool, error)
 	Health() (map[string]string, error)
+	CleanupOrphanedStories() error
 }
 
 type service struct {
@@ -365,13 +370,101 @@ func (s *service) DeleteAllStoriesByUser(userID primitive.ObjectID) (bool, error
 }
 
 func (s *service) Health() (map[string]string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	err := s.db.Ping(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("db down: %v", err)
+		return nil, err
 	}
 
-	return map[string]string{"message": "It's healthy"}, nil
+	return map[string]string{
+		"status": "ok",
+	}, nil
+}
+
+func (s *service) CleanupOrphanedStories() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	distinctResult, err := s.db.Database("storyhub").Collection("storydetails").Distinct(ctx, "owner_id", bson.M{})
+	if err != nil {
+		return fmt.Errorf("error fetching unique owner IDs: %v", err)
+	}
+
+	var ownerIDs []primitive.ObjectID
+	for _, id := range distinctResult {
+		if objID, ok := id.(primitive.ObjectID); ok {
+			ownerIDs = append(ownerIDs, objID)
+		}
+	}
+
+	var orphanedOwnerIDs []primitive.ObjectID
+	for _, ownerID := range ownerIDs {
+		userCheckURL := "https://gordian.onrender.com/api/v1/fetchuserbyid"
+		req, err := http.NewRequestWithContext(ctx, "POST", userCheckURL, nil)
+		if err != nil {
+			return fmt.Errorf("error creating request: %v", err)
+		}
+
+		reqBody, err := json.Marshal(map[string]string{
+			"user_id": ownerID.Hex(),
+		})
+		if err != nil {
+			return fmt.Errorf("error marshaling request body: %v", err)
+		}
+		req.Body = io.NopCloser(bytes.NewBuffer(reqBody))
+		req.Header.Set("Content-Type", "application/json")
+
+		client := &http.Client{
+			Timeout: 10 * time.Second,
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("Error checking user %s: %v", ownerID.Hex(), err)
+			continue
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusNotFound {
+			orphanedOwnerIDs = append(orphanedOwnerIDs, ownerID)
+		} else if resp.StatusCode != http.StatusOK {
+			log.Printf("Unexpected status checking user %s: %d", ownerID.Hex(), resp.StatusCode)
+		}
+	}
+
+	if len(orphanedOwnerIDs) > 0 {
+		cursor, err := s.db.Database("storyhub").Collection("storydetails").Find(ctx,
+			bson.M{"owner_id": bson.M{"$in": orphanedOwnerIDs}},
+			options.Find().SetProjection(bson.M{"_id": 1}),
+		)
+		if err != nil {
+			return fmt.Errorf("error finding orphaned story IDs: %v", err)
+		}
+		defer cursor.Close(ctx)
+
+		var orphanedStoryIDs []primitive.ObjectID
+		if err := cursor.All(ctx, &orphanedStoryIDs); err != nil {
+			return fmt.Errorf("error decoding orphaned story IDs: %v", err)
+		}
+
+		_, err = s.db.Database("storyhub").Collection("storydetails").DeleteMany(ctx, bson.M{"owner_id": bson.M{"$in": orphanedOwnerIDs}})
+		if err != nil {
+			return fmt.Errorf("error deleting orphaned stories: %v", err)
+		}
+
+		_, err = s.db.Database("storyhub").Collection("storycontent").DeleteMany(ctx, bson.M{"story_id": bson.M{"$in": orphanedStoryIDs}})
+		if err != nil {
+			return fmt.Errorf("error deleting orphaned story contents: %v", err)
+		}
+
+		_, err = s.db.Database("storyhub").Collection("storydetails").UpdateMany(ctx,
+			bson.M{"collaborators": bson.M{"$in": orphanedOwnerIDs}},
+			bson.M{"$pull": bson.M{"collaborators": bson.M{"$in": orphanedOwnerIDs}}},
+		)
+		if err != nil {
+			return fmt.Errorf("error removing orphaned users from collaborators: %v", err)
+		}
+	}
+	return nil
 }
