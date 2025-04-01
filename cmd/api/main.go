@@ -9,10 +9,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/mAmineChniti/StoryHub/internal/database"
 	"github.com/mAmineChniti/StoryHub/internal/server"
 )
 
-func gracefulShutdown(apiServer *http.Server, done chan bool) {
+func gracefulShutdown(apiServer *http.Server, done chan bool, stopCleanup chan struct{}) {
 	// Create context that listens for the interrupt signal from the OS.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -21,6 +22,9 @@ func gracefulShutdown(apiServer *http.Server, done chan bool) {
 	<-ctx.Done()
 
 	log.Println("shutting down gracefully, press Ctrl+C again to force")
+
+	// Stop the periodic cleanup
+	close(stopCleanup)
 
 	// The context is used to inform the server it has 5 seconds to finish
 	// the request it is currently handling
@@ -45,8 +49,32 @@ func main() {
 	// Create a done channel to signal when the shutdown is complete
 	done := make(chan bool, 1)
 
+	// Start periodic orphaned stories cleanup
+	dbService := database.New()
+	stopCleanup := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(6 * time.Hour)
+		defer ticker.Stop()
+
+		// Initial cleanup
+		if err := dbService.CleanupOrphanedStories(); err != nil {
+			log.Printf("Initial orphaned stories cleanup error: %v", err)
+		}
+
+		for {
+			select {
+			case <-ticker.C:
+				if err := dbService.CleanupOrphanedStories(); err != nil {
+					log.Printf("Periodic orphaned stories cleanup error: %v", err)
+				}
+			case <-stopCleanup:
+				return
+			}
+		}
+	}()
+
 	// Run graceful shutdown in a separate goroutine
-	go gracefulShutdown(server, done)
+	go gracefulShutdown(server, done, stopCleanup)
 
 	err := server.ListenAndServe()
 	if err != nil && err != http.ErrServerClosed {
