@@ -420,7 +420,7 @@ func (s *service) CleanupOrphanedStories() error {
 
 		now := time.Now()
 		accessClaims := &jwt.RegisteredClaims{
-			Subject:   "system_user",
+			Subject:   ownerID.Hex(),
 			ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)),
 			IssuedAt:  jwt.NewNumericDate(now),
 			ID:        "access",
@@ -462,8 +462,18 @@ func (s *service) CleanupOrphanedStories() error {
 		defer cursor.Close(ctx)
 
 		var orphanedStoryIDs []primitive.ObjectID
-		if err := cursor.All(ctx, &orphanedStoryIDs); err != nil {
-			return fmt.Errorf("error decoding orphaned story IDs: %v", err)
+		for cursor.Next(ctx) {
+			var result bson.M
+			if err := cursor.Decode(&result); err != nil {
+				return fmt.Errorf("error decoding cursor result: %v", err)
+			}
+			if id, ok := result["_id"].(primitive.ObjectID); ok {
+				orphanedStoryIDs = append(orphanedStoryIDs, id)
+			}
+		}
+
+		if err := cursor.Err(); err != nil {
+			return fmt.Errorf("cursor error: %v", err)
 		}
 
 		_, err = s.db.Database("storyhub").Collection("storydetails").DeleteMany(ctx, bson.M{"owner_id": bson.M{"$in": orphanedOwnerIDs}})
