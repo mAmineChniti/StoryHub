@@ -11,12 +11,14 @@ import (
 	"os"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	_ "github.com/joho/godotenv/autoload"
-	"github.com/mAmineChniti/StoryHub/internal/data"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+
+	"github.com/mAmineChniti/StoryHub/internal/data"
 )
 
 type Service interface {
@@ -415,6 +417,22 @@ func (s *service) CleanupOrphanedStories() error {
 		}
 		req.Body = io.NopCloser(bytes.NewBuffer(reqBody))
 		req.Header.Set("Content-Type", "application/json")
+
+		now := time.Now()
+		accessClaims := &jwt.RegisteredClaims{
+			Subject:   "system_user",
+			ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			ID:        "access",
+		}
+
+		jwtSecret := []byte(os.Getenv("JWTSECRET"))
+		tokenString, err := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims).SignedString(jwtSecret)
+		if err != nil {
+			return fmt.Errorf("error generating JWT token: %v", err)
+		}
+
+		req.Header.Set("Authorization", "Bearer "+tokenString)
 
 		client := &http.Client{
 			Timeout: 10 * time.Second,
