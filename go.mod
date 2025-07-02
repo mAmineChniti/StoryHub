@@ -17,7 +17,7 @@ require (
 )
 
 require (
-	github.com/go-playground/validator/v10 v10.26.0
+	github.com/go-playground/validator/v10 v10.27.0
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/klauspost/compress v1.17.4 // indirect
 	github.com/labstack/echo-jwt/v4 v4.3.1
